@@ -1,0 +1,274 @@
+/* CameraTest.css - Add this to your CSS files */
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
+  .camera-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+  }
+  
+  .camera-content {
+    background-color: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 720px;
+    max-height: 90vh;
+    overflow: auto;
+    position: relative;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  }
+  
+  .camera-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 15px;
+  }
+  
+  .camera-header h2 {
+    margin: 0;
+    color: #111827;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+  
+  .close-button {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+  }
+  
+  .close-button:hover {
+    background-color: #f3f4f6;
+    color: #374151;
+  }
+  
+  .video-container {
+    position: relative;
+    width: 640px;
+    height: 480px;
+    margin: 0 auto;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  
+  .loading {
+    width: 640px;
+    height: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f3f4f6;
+    color: #374151;
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #e5e7eb;
+    border-top: 3px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  .countdown {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 72px;
+    font-weight: bold;
+    color: #ffffff;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    z-index: 10;
+    animation: pulse 1s ease-in-out infinite;
+  }
+  
+  @keyframes pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.1); }
+  }
+  
+  .confidence-meter {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    background-color: rgba(0,0,0,0.7);
+    padding: 8px;
+    border-radius: 6px;
+  }
+  
+  .confidence-label {
+    color: white;
+    font-size: 12px;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  
+  .confidence-bar {
+    width: 100%;
+    height: 4px;
+    background-color: rgba(255,255,255,0.3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  
+  .confidence-fill {
+    height: 100%;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    border-radius: 2px;
+  }
+  
+  .camera-controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  
+  .btn-primary {
+    background-color: #3b82f6;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.2s, transform 0.1s;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  }
+  
+  .btn-primary:hover:not(:disabled) {
+    background-color: #2563eb;
+    transform: translateY(-1px);
+  }
+  
+  .btn-primary:active {
+    transform: translateY(0);
+  }
+  
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+  
+  .btn-secondary {
+    background-color: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    transition: background-color 0.2s, transform 0.1s;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  }
+  
+  .btn-secondary:hover {
+    background-color: #e5e7eb;
+    transform: translateY(-1px);
+  }
+  
+  .btn-secondary:active {
+    transform: translateY(0);
+  }
+  
+  .results-container {
+    text-align: center;
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #f0fdf4;
+    border-radius: 8px;
+    border: 1px solid #bbf7d0;
+  }
+  
+  .results-container h3 {
+    color: #059669;
+    margin: 0 0 10px 0;
+    font-size: 1.25rem;
+  }
+  
+  .results-container p {
+    color: #065f46;
+    margin: 0;
+    font-size: 14px;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .camera-modal {
+      padding: 10px;
+    }
+    
+    .camera-content {
+      padding: 16px;
+      max-width: 100%;
+    }
+    
+    .video-container {
+      width: 100%;
+      max-width: 640px;
+      height: auto;
+      aspect-ratio: 4/3;
+    }
+    
+    .video-container video,
+    .video-container canvas {
+      width: 100%;
+      height: 100%;
+    }
+    
+    .countdown {
+      font-size: 48px;
+    }
+    
+    .camera-controls {
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    .btn-primary,
+    .btn-secondary {
+      width: 100%;
+      max-width: 200px;
+      justify-content: center;
+    }
+  }
