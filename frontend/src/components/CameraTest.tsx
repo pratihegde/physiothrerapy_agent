@@ -19,6 +19,11 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
   const [capturedKeypoints, setCapturedKeypoints] = useState<any[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // ADD THESE NEW STATE VARIABLES
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [detectionConfidence, setDetectionConfidence] = useState<number>(0);
+  const animationFrameId = useRef<number | null>(null);
 
   useEffect(() => {
     const initializeTFAndCamera = async () => {
@@ -28,12 +33,19 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
         // Initialize TensorFlow.js
         await tf.ready();
         
-        // Set backend to WebGL
-        await tf.setBackend('webgl');
+        // MODIFIED: Try WebGL first, fallback to CPU
+        try {
+          await tf.setBackend('webgl');
+        } catch (e) {
+          console.warn('WebGL not available, falling back to CPU');
+          await tf.setBackend('cpu');
+        }
         
         // Load MoveNet model
         const detectorConfig = {
           modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+          enableSmoothing: true,  // ADD THIS
+          minPoseScore: 0.3      // ADD THIS
         };
         const detector = await poseDetection.createDetector(
           poseDetection.SupportedModels.MoveNet,
@@ -59,9 +71,10 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           
-          // Wait for video to be ready
+          // IMPORTANT: Start detection loop when video is ready
           videoRef.current.onloadedmetadata = () => {
             setIsLoading(false);
+            detectPose(); // ADD THIS LINE - Start continuous detection
           };
         }
       } catch (err) {
@@ -79,11 +92,35 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
       }
+      // ADD: Cancel animation frame
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
     };
   }, []);
 
+  // ADD: Timeout protection for capture
+  useEffect(() => {
+    if (isCapturing && countdown === 0) {
+      const timeout = setTimeout(() => {
+        if (!capturedKeypoints) {
+          setCaptureError("Capture timeout. Please try again.");
+          setIsCapturing(false);
+          setCountdown(null);
+        }
+      }, 5000); // 5 second timeout
+      
+      return () => clearTimeout(timeout);
+    }
+  }, [isCapturing, countdown, capturedKeypoints]);
+
+  // COMPLETELY REPLACE the detectPose function
   const detectPose = async () => {
-    if (!detector || !videoRef.current || !canvasRef.current || !videoRef.current.readyState) return;
+    if (!detector || !videoRef.current || !canvasRef.current || !videoRef.current.readyState) {
+      // Retry if not ready
+      animationFrameId.current = requestAnimationFrame(detectPose);
+      return;
+    }
 
     try {
       const poses = await detector.estimatePoses(videoRef.current);
@@ -98,21 +135,60 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
         drawKeypoints(poses[0].keypoints, ctx);
         drawSkeleton(poses[0].keypoints, ctx);
         
-        if (isCapturing && countdown === 0) {
-          setCapturedKeypoints(poses[0].keypoints);
-          setIsCapturing(false);
-          return;
+        // Calculate average confidence
+        const avgConfidence = poses[0].keypoints.reduce((sum, kp) => 
+          sum + (kp.score || 0), 0) / poses[0].keypoints.length;
+        setDetectionConfidence(avgConfidence);
+        
+        // Capture when countdown reaches 0 AND confidence is good
+        if (isCapturing && countdown === 0 && !capturedKeypoints) {
+          if (avgConfidence > 0.5) {
+            setCapturedKeypoints(poses[0].keypoints);
+            setIsCapturing(false);
+            setCountdown(null);
+            return; // Stop the loop after capture
+          } else {
+            setCaptureError("Please ensure you're fully visible in the camera");
+          }
         }
       }
 
+      // Continue detection loop unless we've captured
       if (!capturedKeypoints) {
-        requestAnimationFrame(detectPose);
+        animationFrameId.current = requestAnimationFrame(detectPose);
       }
     } catch (err) {
       console.error('Error detecting pose:', err);
+      // Continue trying even if there's an error
+      animationFrameId.current = requestAnimationFrame(detectPose);
     }
   };
 
+  // REPLACE the startCapture function
+  const startCapture = () => {
+    if (!detector || isLoading) return;
+    
+    setCountdown(3);
+    setIsCapturing(true);
+    setCaptureError(null); // Clear any previous errors
+    
+    const interval = setInterval(() => {
+      setCountdown(prev => {
+        if (prev === null || prev <= 0) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // Make sure detection is running
+    if (!animationFrameId.current) {
+      detectPose();
+    }
+  };
+
+  // Keep the rest of the functions the same
   const drawKeypoints = (keypoints: any[], ctx: CanvasRenderingContext2D) => {
     keypoints.forEach((keypoint: any) => {
       if (keypoint.score && keypoint.score > 0.3) {
@@ -142,26 +218,6 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
     });
   };
 
-  const startCapture = () => {
-    if (!detector || isLoading) return;
-    
-    setCountdown(3);
-    setIsCapturing(true);
-    
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev === null || prev <= 0) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    // Start pose detection
-    detectPose();
-  };
-
   const handleComplete = () => {
     if (capturedKeypoints) {
       // Normalize keypoints for backend
@@ -178,7 +234,9 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
   const retry = () => {
     setCapturedKeypoints(null);
     setCountdown(null);
-    detectPose();
+    setCaptureError(null);
+    setDetectionConfidence(0);
+    detectPose(); // Restart detection
   };
 
   if (error) {
@@ -252,7 +310,30 @@ export const CameraTest: React.FC<CameraTestProps> = ({ test, onComplete, onClos
           {countdown !== null && countdown > 0 && (
             <div className="countdown">{countdown}</div>
           )}
+          
+          {/* ADD: Confidence meter */}
+          {detectionConfidence > 0 && !capturedKeypoints && (
+            <div className="confidence-meter">
+              <div className="confidence-label">Pose Detection Quality</div>
+              <div className="confidence-bar">
+                <div 
+                  className="confidence-fill" 
+                  style={{ 
+                    width: `${detectionConfidence * 100}%`,
+                    backgroundColor: detectionConfidence > 0.5 ? '#10b981' : '#f59e0b'
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* ADD: Error display */}
+        {captureError && (
+          <div style={{ color: 'red', marginTop: '10px', textAlign: 'center' }}>
+            {captureError}
+          </div>
+        )}
 
         <div className="camera-controls">
           {!capturedKeypoints ? (
