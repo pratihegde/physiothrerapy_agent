@@ -51,8 +51,11 @@ def get_available_tests():
 def start_assessment(request: StartAssessmentRequest):
     """Initialize assessment"""
     try:
-        agents[request.session_id] = PhysiotherapyAgent()
-        response = agents[request.session_id].start_assessment(request.user_name)
+        agent = agents.get(request.session_id)
+        if agent is None:
+            agent = PhysiotherapyAgent()
+            agents[request.session_id] = agent
+        response = agent.start_assessment(request.user_name)
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

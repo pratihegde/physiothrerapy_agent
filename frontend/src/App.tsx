@@ -16,7 +16,10 @@ function App() {
   const [assessmentState, setAssessmentState] = useState<'chat' | 'testing' | 'complete'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const startedRef = useRef(false);
   useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
     startAssessment();
   }, []);
 

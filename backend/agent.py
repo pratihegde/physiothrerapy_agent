@@ -32,56 +32,52 @@ class PhysiotherapyAgent:
         with open('exercises.json', 'r') as f:
             self.exercises = json.load(f)
         
-        # Define Tara's personality in system prompt
-        self.system_prompt = """You are Tara, a warm and caring physiotherapist. 
+        # Simplified system prompt for better formatting
+        self.system_prompt = """You are Tara, a warm physiotherapist. Keep responses VERY SHORT (max 50 words).
+Use this EXACT format:
+- Opening statement (empathetic)
+- Blank line
+- Bullet points (each on new line, start with •)
+- Blank line  
+- Closing question
 
-PERSONALITY:
-- Address users as "beautiful soul" or other caring terms
-- Be genuinely empathetic about their pain
-- Use bullet points with proper line breaks for all responses
-- Keep responses short and concise (under 100 words)
-- Ask about connected body parts and past injuries
-
-FORMATTING RULES (CRITICAL):
-- ALWAYS use bullet points with line breaks like this:
-  • First point
-  • Second point  
-  • Third point
-- NEVER write long paragraphs
-- Keep each bullet point short (max 10 words)
-- Always end with a caring question
-
-EXAMPLE RESPONSE FORMAT:
-"I'm so sorry your neck hurts!
-
-• Do you have shoulder tightness too?
-• Any past neck injuries?
-• Long hours at computer/phone?
-
-What makes it feel worse, beautiful soul?"
-"""
+NEVER use paragraphs. Always use bullet points."""
+    
+    def format_response(self, text: str) -> str:
+        """Helper to ensure proper formatting"""
+        # Clean up the response
+        text = text.strip()
+        
+        # Ensure bullet points are on new lines
+        text = text.replace('• ', '\n• ')
+        text = text.replace('- ', '\n• ')
+        
+        # Remove double newlines
+        while '\n\n\n' in text:
+            text = text.replace('\n\n\n', '\n\n')
+        
+        # Ensure questions end with proper spacing
+        text = text.replace('?', '?\n')
+        
+        # Clean up any extra whitespace
+        lines = [line.strip() for line in text.split('\n')]
+        text = '\n'.join(lines)
+        
+        return text.strip()
     
     def start_assessment(self, user_name: str = "there") -> Dict:
-        """Start assessment with fixed greeting to prevent duplicates"""
+        """Start assessment with fixed greeting"""
         
-        # Prevent duplicate greetings
         if self.assessment_state["greeting_sent"]:
             return {
-                "message": "I'm still here to help! What area is bothering you?",
+                "message": "I'm still here to help!\n\nWhat area is bothering you?",
                 "state": "awaiting_problem_areas"
             }
         
-        # Mark greeting as sent
         self.assessment_state["greeting_sent"] = True
         self.assessment_state["session_started"] = True
         
-        # Fixed greeting message (not LLM generated to prevent duplicates)
-        greeting = """Hello beautiful soul! I'm Tara, your physiotherapist for the day.
-
-• Tell me where it hurts
-• I'm here to help you feel better
-
-What area is giving you trouble today?"""
+        greeting = "Hello beautiful soul! I'm Tara, your physiotherapist for the day.\n\n• Tell me where it hurts\n• I'm here to help you feel better\n\nWhat area is giving you trouble today?"
         
         self.memory.save_context(
             {"input": f"Start assessment for {user_name}"}, 
@@ -96,82 +92,115 @@ What area is giving you trouble today?"""
     def process_problem_areas(self, user_message: str) -> Dict:
         """Process user's problem areas with proper formatting"""
         
-        # Update state
         self.assessment_state["user_concerns"] = user_message
-        
-        # Detect pain area
         pain_area = self._detect_primary_pain_area(user_message.lower())
         
         if not pain_area:
+            response = """I want to understand where you're hurting.
+
+• Neck, shoulders, or jaw?
+• Lower back or hips?
+• Knees or ankles?
+
+What's bothering you most, beautiful soul?"""
             return {
-                "message": """I want to understand exactly where you're hurting.
-
-• Could you tell me the specific area?
-• Main areas: neck, shoulders, lower back, knees, ankles, or jaw
-
-What's bothering you most?""",
+                "message": response,
                 "recommended_tests": []
             }
         
-        # Get empathetic response using prompt template
-        response_template = PromptTemplate(
-            input_variables=["pain_area", "user_message"],
-            template="""User said they have {pain_area} pain: "{user_message}"
-
-Respond as Tara with empathy and follow-up questions.
-
-MUST follow this exact format:
-Line 1: Empathetic statement about their {pain_area} pain
-Line 2: Empty line
-Line 3-5: Exactly 3 bullet points asking about:
-• Connected body parts  
-• Past injuries
-• Activity that causes it
-Line 6: Empty line  
-Line 7: Caring follow-up question
-
-Keep each bullet point under 8 words. Be warm but concise."""
-        )
-        
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=response_template.format(
-                pain_area=pain_area,
-                user_message=user_message
-            ))
-        ]
-        
-        response = self.llm.invoke(messages)
-        empathetic_response = response.content
+        # Generate formatted response for specific pain area
+        response = self._generate_pain_response(pain_area, user_message)
         
         # Get recommended tests
         recommended_tests = self._get_recommended_tests([pain_area])
         self.assessment_state["recommended_tests"] = recommended_tests
         
-        # Add test message
-        test_message = """
-
-Based on what you've shared, let's do some movement tests:
-
-• These will help me understand what's happening
-• Ready to start your assessment?"""
-
-        full_response = empathetic_response + test_message
+        # Add test prompt
+        test_message = "\n\nLet's do some movement tests:\n\n• These help me understand what's happening\n• Ready to start your assessment?"
+        
+        full_response = response + test_message
         
         return {
             "message": full_response,
             "recommended_tests": [self._format_test_for_frontend(test) for test in recommended_tests]
         }
     
+    def _generate_pain_response(self, pain_area: str, user_message: str) -> str:
+        """Generate pain-specific response with proper formatting"""
+        
+        # Pain-specific responses (keep them short and formatted)
+        pain_responses = {
+            "neck": """I'm so sorry your neck hurts!
+
+• Any shoulder tightness too?
+• Past neck injuries?
+• Long hours at computer?
+
+What makes it feel worse?""",
+            
+            "shoulder": """Oh no, shoulder pain is tough!
+
+• Which shoulder hurts?
+• Pain when lifting arms?
+• Any neck stiffness?
+
+When did this start?""",
+            
+            "lower_back": """Lower back pain is so common!
+
+• Sharp or dull pain?
+• Worse when sitting/standing?
+• Any leg numbness?
+
+What triggered this?""",
+            
+            "knee": """Knee pain can really limit you!
+
+• Which knee bothers you?
+• Pain when walking/stairs?
+• Any swelling?
+
+How long has this been happening?""",
+            
+            "ankle": """Ankle pain affects everything!
+
+• Recent injury or twist?
+• Swelling or stiffness?
+• Pain when walking?
+
+What activities hurt most?""",
+            
+            "jaw": """Jaw pain is so uncomfortable!
+
+• Clicking or popping?
+• Headaches too?
+• Stress or teeth grinding?
+
+When is it worst?"""
+        }
+        
+        # Return the specific response or generate one
+        if pain_area in pain_responses:
+            return pain_responses[pain_area]
+        
+        # Fallback if area not found
+        return f"""I understand you have {pain_area} pain.
+
+• How severe is it?
+• What triggers it?
+• Any other symptoms?
+
+Tell me more, beautiful soul."""
+    
     def _detect_primary_pain_area(self, message: str) -> Optional[str]:
         """Detect primary pain area from user message"""
         pain_keywords = {
             "neck": ["neck", "cervical"],
             "shoulder": ["shoulder", "arm"],
-            "lower_back": ["back", "lower back", "lumbar"],  
-            "knee": ["knee", "kneecap"],
-            "ankle": ["ankle", "foot"],
-            "jaw": ["jaw", "tmj", "face"]
+            "lower_back": ["back", "lower back", "lumbar", "spine"],  
+            "knee": ["knee", "kneecap", "leg"],
+            "ankle": ["ankle", "foot", "heel"],
+            "jaw": ["jaw", "tmj", "face", "mouth"]
         }
         
         for area, keywords in pain_keywords.items():
@@ -208,12 +237,13 @@ Based on what you've shared, let's do some movement tests:
             if not keypoints:
                 return {
                     "success": False,
-                    "explanation": """I couldn't capture your movement properly!
+                    "explanation": """I couldn't capture your movement!
 
-• Don't worry - this happens sometimes
-• Make sure you're well-lit and visible
-• Let's try that test again
-• I'm here to support you through this"""
+• Make sure you're well-lit
+• Stay in camera view
+• Let's try again
+
+Don't worry, we'll get it!"""
                 }
             
             # Validate keypoints
@@ -221,12 +251,13 @@ Based on what you've shared, let's do some movement tests:
                 if 'x' not in kp or 'y' not in kp:
                     return {
                         "success": False,
-                        "explanation": """Let's try that movement test again, dear!
+                        "explanation": """Let's try again, dear!
 
-• The camera didn't capture all data
-• Make sure your whole body is visible
-• Take your time - no rush
-• We'll get this right together!"""
+• Camera didn't capture all data
+• Make sure whole body visible
+• Take your time
+
+We'll get this right together!"""
                     }
             
             # Analyze movement
@@ -242,35 +273,21 @@ Based on what you've shared, let's do some movement tests:
             self.assessment_state["test_results"][test_id] = raw_results
             self.assessment_state["completed_tests"].append(test_id)
             
-            # Generate encouraging explanation using prompt template
-            explanation_template = PromptTemplate(
-                input_variables=["test_name", "results", "area"],
-                template="""User completed {test_name} for {area}.
-Results: {results}
+            # Generate simple encouraging feedback
+            if raw_results.get("pass", True):
+                explanation = f"""Great job completing the test!
 
-As Tara, give encouraging feedback in this format:
-Line 1: Positive statement about completing the test
-Line 2: Empty line
-Line 3-4: 2 bullet points about what this reveals
-Line 5: Empty line
-Line 6: Encouraging statement about their progress
+• Your {area} mobility looks good
+• Keep up the movement
 
-Keep it under 60 words total. Be warm and supportive."""
-            )
-            
-            test_info = MOBILITY_TESTS[area][test_type]
-            
-            messages = [
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(content=explanation_template.format(
-                    test_name=test_info['name'],
-                    results=json.dumps(raw_results, indent=2),
-                    area=area
-                ))
-            ]
-            
-            response = self.llm.invoke(messages)
-            explanation = response.content
+Ready for the next test?"""
+            else:
+                explanation = f"""Test complete! I see what's happening.
+
+• Your {area} needs some work
+• We'll address this in your routine
+
+Let's continue, beautiful soul!"""
             
             return {
                 "success": True,
@@ -282,12 +299,13 @@ Keep it under 60 words total. Be warm and supportive."""
             print(f"Error analyzing movement: {e}")
             return {
                 "success": False,
-                "explanation": """Something went wrong with analyzing your movement.
+                "explanation": """Technical hiccup!
 
-• Don't worry - technical hiccups happen!
-• Let's try that test again when ready
-• I'm still here to help you
-• Your progress matters more than perfect data"""
+• Don't worry, it happens
+• Let's try again
+• I'm still here for you
+
+Ready when you are!"""
             }
     
     def generate_routine(self) -> Dict:
@@ -300,36 +318,29 @@ Keep it under 60 words total. Be warm and supportive."""
                 area, test_type = test_id.split('_', 1)
                 problem_areas.append((area, test_type, results))
         
-        routine_template = PromptTemplate(
-            input_variables=["problem_areas", "user_concerns"],
-            template="""Create personalized routine for user with these issues:
-Problem areas: {problem_areas}
-Original concerns: {user_concerns}
+        # Generate simple routine message
+        if problem_areas:
+            areas_text = ", ".join([area for area, _, _ in problem_areas])
+            explanation = f"""Your personalized routine is ready!
 
-As Tara, respond in this format:
-Line 1: Encouraging statement about their personalized routine
-Line 2: Empty line  
-Line 3-5: 3 bullet points about what the routine targets
-Line 6: Empty line
-Line 7: Motivational closing statement
+• Targets your {areas_text} issues
+• Gentle progressive exercises
+• Do daily for best results
 
-Keep under 80 words total. Be warm and caring."""
-        )
-        
-        messages = [
-            SystemMessage(content=self.system_prompt),
-            HumanMessage(content=routine_template.format(
-                problem_areas=str(problem_areas),
-                user_concerns=self.assessment_state.get('user_concerns', 'General mobility')
-            ))
-        ]
-        
-        response = self.llm.invoke(messages)
+You've got this, beautiful soul!"""
+        else:
+            explanation = """Great news! Your mobility is good!
+
+• Maintenance routine created
+• Keep your body moving
+• Prevent future issues
+
+Stay consistent, you're doing amazing!"""
         
         exercises = self._generate_targeted_exercises(problem_areas)
         
         return {
-            "explanation": response.content,
+            "explanation": explanation,
             "exercises": exercises
         }
     
@@ -337,36 +348,60 @@ Keep under 80 words total. Be warm and caring."""
         """Generate exercises targeting specific problem areas"""
         exercises = []
         
-        for area, test_type, results in problem_areas:
-            if area == "neck":
-                exercises.extend([
-                    {
-                        "name": "Gentle Neck Stretches",
-                        "duration": "3 minutes",
-                        "description": "Slowly stretch in all directions",
-                        "sets": "Hold each direction 30 seconds"
-                    }
-                ])
-            elif area == "shoulder":
-                exercises.extend([
-                    {
-                        "name": "Cross-Body Shoulder Stretch",
-                        "duration": "2 minutes",
-                        "description": "Gentle stretch to improve mobility", 
-                        "sets": "4 holds per arm"
-                    }
-                ])
-            # Add more targeted exercises for other areas
-            
-        # Add default exercises if none specific
-        if not exercises:
-            exercises = [
-                {
-                    "name": "Daily Movement Flow",
-                    "duration": "5 minutes",
-                    "description": "Gentle full-body movement",
-                    "sets": "1 flow"
-                }
-            ]
-            
-        return exercises
+        # Add targeted exercises based on problem areas
+        area_exercises = {
+            "neck": {
+                "name": "Gentle Neck Stretches",
+                "duration": "3 minutes",
+                "description": "Slowly stretch in all directions",
+                "sets": "Hold 30 seconds each"
+            },
+            "shoulder": {
+                "name": "Shoulder Rolls & Stretches",
+                "duration": "4 minutes",
+                "description": "Improve shoulder mobility",
+                "sets": "10 rolls, 4 stretches"
+            },
+            "lower_back": {
+                "name": "Cat-Cow Stretches",
+                "duration": "5 minutes",
+                "description": "Mobilize your spine gently",
+                "sets": "15 repetitions"
+            },
+            "knee": {
+                "name": "Knee Strengthening",
+                "duration": "5 minutes",
+                "description": "Build knee stability",
+                "sets": "10 reps each leg"
+            },
+            "ankle": {
+                "name": "Ankle Circles & Flexes",
+                "duration": "3 minutes",
+                "description": "Improve ankle mobility",
+                "sets": "15 circles each direction"
+            },
+            "jaw": {
+                "name": "Jaw Release Exercises",
+                "duration": "3 minutes",
+                "description": "Relieve jaw tension",
+                "sets": "5 gentle stretches"
+            }
+        }
+        
+        # Add exercises for identified problem areas
+        added_areas = set()
+        for area, _, _ in problem_areas:
+            if area in area_exercises and area not in added_areas:
+                exercises.append(area_exercises[area])
+                added_areas.add(area)
+        
+        # Add general exercise if no specific problems or as addition
+        if not exercises or len(exercises) < 3:
+            exercises.append({
+                "name": "Full Body Flow",
+                "duration": "5 minutes",
+                "description": "Gentle movement for overall health",
+                "sets": "1 complete flow"
+            })
+        
+        return exercises[:3]  # Limit to 3 exercises to keep it manageable
